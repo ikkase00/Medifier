@@ -1,7 +1,8 @@
 .idea/
 .DS_Store
 medi/
-data/
+/data/
 original/
 model/flowers-102/
 /data_parsed/
+/data_parsed_five_sec/
