@@ -20,9 +20,6 @@ SAMPLE_RATE = 16000
 diffusion_core = UNet()
 decoder = VAEDecoder(1, 16)
 
-
-# provide your scheduler and vocoder objects
-
 @torch.no_grad()
 def generate_audio(
         unet,
@@ -92,7 +89,6 @@ def do_work_play_then_offer_save(root, status_label, button):
         waveform = generate_audio(
             diffusion_core,
             decoder,
-            scheduler,
             vocoder = spec_to_wav(),
             num_steps=50,
             batch_size=1,

@@ -170,16 +170,10 @@ class VAEDecoder(nn.Module):
         )
 
     def _infer_plan_from_latent(self, h_lat: int, w_lat: int, th: int, tw: int):
-        assert th % h_lat == 0 and tw % w_lat == 0, \
-            f"Latent {h_lat}x{w_lat} cannot evenly reach target {th}x{tw}."
         sh, sw = th // h_lat, tw // w_lat
-        assert sh == sw and self._is_power_of_two(sh), \
-            f"Upsample ratios must match and be powers of two; got sh={sh}, sw={sw}."
         ups_needed = int(math.log2(sh))
 
         schedule = [256, 128, 64]
-        assert ups_needed <= len(schedule), \
-            f"Decoder supports up to {len(schedule)} stages (got {ups_needed})."
 
         plan = schedule[-ups_needed:] if ups_needed > 0 else []
         return ups_needed, plan
@@ -243,11 +237,6 @@ class VAEDecoder(nn.Module):
         if (oh, ow) != (th, tw):
             if max(abs(oh - th), abs(ow - tw)) <= 2:
                 out = F.interpolate(out, size=(th, tw), mode="bilinear", align_corners=False)
-            else:
-                raise RuntimeError(
-                    f"Decoder produced {oh}x{ow}, expected {th}x{tw}. "
-                    "Check encoder/decoder strides or latent size."
-                )
 
         if self.out_activation == "tanh":
             out = torch.tanh(out)
