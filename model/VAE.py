@@ -3,12 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-
+# Build ResNet blocks
 class ResBlock(nn.Module):
     expansion = 1
 
     def __init__(self, in_planes, planes, stride=1, last_layer=False, groups=32):
         super().__init__()
+
+        # Build layers of the block
         self.last_layer = last_layer
 
         self.conv1gn = nn.GroupNorm(groups, in_planes)
@@ -17,6 +19,7 @@ class ResBlock(nn.Module):
         self.conv2gn = nn.GroupNorm(groups, planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
 
+        # Add skip connection
         if stride != 1 or in_planes != planes * self.expansion:
             self.cut = nn.Sequential(
                 nn.GroupNorm(groups, in_planes),
@@ -31,12 +34,14 @@ class ResBlock(nn.Module):
         out = out + self.cut(x)
         return out
 
-
+# The ResNet bottleneck, same concept with the ResBlock but with an additional upsampling
 class ResBottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, in_planes, planes, stride=1, last_layer=False, groups=32):
         super().__init__()
+
+        # Build layers of the model
         self.last_layer = last_layer
 
         self.conv1gn = nn.GroupNorm(groups, in_planes)
@@ -63,14 +68,15 @@ class ResBottleneck(nn.Module):
         out = out + self.cut(x)
         return out
 
-
+# Encoder
 class VAEEncoder(nn.Module):
     def __init__(self, in_channels, C, r, num_blocks=(2, 2, 2, 2)):
         super().__init__()
-        self.C = C
-        self.r = r
+        self.C = C # Latent channels
+        self.r = r # Timesteps
         self.num_blocks = num_blocks
 
+        # Build layers of the model
         self.stem = nn.Conv2d(in_channels, 64, kernel_size=7, stride=1, padding=3, bias=False)
 
         self.in_planes = 64
@@ -94,11 +100,14 @@ class VAEEncoder(nn.Module):
         out = self.layer2(out)
         out = self.down2(out)
         out = self.bottleneck(out)
+
+        # Mean and log variance of the latent space, required by the paper for loss calculation
         mu = self.mu(out)
         logvar = self.logvar(out)
 
         return mu, logvar
 
+    # helper function to make and stack layers
     def _make_layer(self, block, num_blocks, planes, stride=1):
         layers = []
         layers.append(block(self.in_planes, planes, stride=stride))
@@ -108,7 +117,7 @@ class VAEEncoder(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-
+# Decoder
 class VAEDecoder(nn.Module):
     def __init__(
             self,
@@ -116,8 +125,8 @@ class VAEDecoder(nn.Module):
             C: int,
             num_blocks=(2, 2, 2, 2),
             groups: int = 32,
-            target_hw=(80, 512),
-            upsample_mode: str = "nearest",  # 'nearest' or 'bilinear'
+            target_hw=(80, 512), # Output width and height
+            upsample_mode: str = "nearest",
             out_activation: str = "tanh",
             debug_shapes: bool = False,
     ):
@@ -146,10 +155,12 @@ class VAEDecoder(nn.Module):
         return max(1, math.gcd(g, c))
 
     def _upsample(self):
+        # Choose upsampling technique
         if self.upsample_mode == "bilinear":
             return nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
         return nn.Upsample(scale_factor=2, mode=self.upsample_mode)
 
+    # helper function to make and stack layers
     def _make_layer(self, block, in_planes, planes, n_blocks, groups):
         layers = []
 
@@ -160,6 +171,7 @@ class VAEDecoder(nn.Module):
             in_planes = planes * block.expansion
         return nn.Sequential(*layers), in_planes
 
+    # Upsample using ResBlocks
     def _upstage(self, in_ch: int, out_ch: int, n_blocks: int) -> nn.Sequential:
         return nn.Sequential(
             nn.GroupNorm(self._g_ok(self.groups, in_ch), in_ch),
@@ -169,6 +181,7 @@ class VAEDecoder(nn.Module):
               for _ in range(n_blocks)]
         )
 
+    # Figure out how many upsampling steps needed
     def _infer_plan_from_latent(self, h_lat: int, w_lat: int, th: int, tw: int):
         sh, sw = th // h_lat, tw // w_lat
         ups_needed = int(math.log2(sh))
@@ -178,6 +191,7 @@ class VAEDecoder(nn.Module):
         plan = schedule[-ups_needed:] if ups_needed > 0 else []
         return ups_needed, plan
 
+    # Build decoder base on the latent size z
     def _build_from_z(self, z: torch.Tensor):
         B, Cz, h, w = z.shape
         th, tw = self.target_hw
@@ -199,6 +213,7 @@ class VAEDecoder(nn.Module):
         )
         self.bottleneck = bottleneck_blocks
 
+        # Build upsampling layers
         ups = []
 
         stage_blocks = {
@@ -223,6 +238,7 @@ class VAEDecoder(nn.Module):
 
         self._built = True
 
+    # Apply layers
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         if not self._built:
             self._build_from_z(z)
@@ -232,12 +248,14 @@ class VAEDecoder(nn.Module):
         h = self.ups(h)
         out = self.head(h)
 
+        # Resize
         th, tw = self.target_hw
         oh, ow = out.shape[-2:]
         if (oh, ow) != (th, tw):
             if max(abs(oh - th), abs(ow - tw)) <= 2:
                 out = F.interpolate(out, size=(th, tw), mode="bilinear", align_corners=False)
 
+        # Apply activatiosn
         if self.out_activation == "tanh":
             out = torch.tanh(out)
         elif self.out_activation == "sigmoid":

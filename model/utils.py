@@ -7,7 +7,9 @@ import torch
 import sounddevice as sd
 import numpy as np
 
+# This file copies function from the "diff.ipynb" notebook to make sure they can be imported as helper functions
 
+# WavToSpec was recreated as a class to work with the pytorch dataset transformation
 class WavToSpec:
     def __init__(self, T=512, HOP_LENGTH=512, N_FFT=2048, POWER=2.0):
         self.T = T
@@ -37,7 +39,7 @@ class WavToSpec:
 
         return torch.tensor(mel, dtype=torch.float32).unsqueeze(0)
 
-
+# Same as in diff.ipynb
 def show_spec(mel):
     plt.figure(figsize=(10, 4))
     plt.imshow(mel, aspect='auto', origin='lower', cmap='magma')
@@ -47,7 +49,7 @@ def show_spec(mel):
     plt.tight_layout()
     plt.show()
 
-
+# Same as in diff.ipynb
 def spec_to_wav(spec, sample_rate, T=512, HOP_LENGTH=512, N_FFT=2048, POWER=2.0):
     spec = spec
     inv = inverse.mel_to_audio(

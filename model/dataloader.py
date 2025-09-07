@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-
+# This set up a custom dataloader for loading my training dataset
 class Spectro(Dataset):
     def __init__(self, data, transform):
         self.data = data
